@@ -79,6 +79,33 @@ class DatabaseService {
     }
   }
 
+  Future<int> updateJob(Job job) async {
+    try {
+      final db = await database;
+      return await db.update(
+        'jobs',
+        job.toMap(),
+        where: 'id = ?',
+        whereArgs: [job.id],
+      );
+    } catch (e) {
+      throw Exception('Failed to update job: $e');
+    }
+  }
+
+  Future<int> deleteJob(int id) async {
+    try {
+      final db = await database;
+      return await db.delete(
+        'jobs',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      throw Exception('Failed to delete job: $e');
+    }
+  }
+
   Future<List<Job>> getJobs() async {
     try {
       final db = await database;

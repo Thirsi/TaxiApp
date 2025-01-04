@@ -110,14 +110,20 @@ class DailySummary {
       }
     }
 
-    // Calculate total miles if all jobs have end mileage
-    if (dayJobs.isNotEmpty && dayJobs.every((job) => job.endMileage != null)) {
+    // Find the overall start and end mileage for the day
+    if (dayJobs.isNotEmpty) {
+      // Sort jobs by date to ensure correct order
+      dayJobs.sort((a, b) => a.date.compareTo(b.date));
+      
       final firstJob = dayJobs.first;
       final lastJob = dayJobs.last;
-      miles = lastJob.endMileage! - firstJob.startMileage;
-
-      // Calculate mileage-only total (even if no jobs)
-      mileageOnlyTotal = miles * settings.mileageRate + settings.shiftCharge;
+      
+      // Only calculate if we have an end mileage
+      if (lastJob.endMileage != null) {
+        miles = lastJob.endMileage! - firstJob.startMileage;
+        // Calculate total based on overall mileage
+        mileageOnlyTotal = (miles! * settings.mileageRate) + settings.shiftCharge;
+      }
     }
 
     return DailySummary(

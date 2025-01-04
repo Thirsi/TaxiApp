@@ -8,6 +8,7 @@ import 'screens/end_mileage_screen.dart';
 import 'screens/add_job_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/edit_job_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +27,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taxi Job Tracker',
+      title: 'Taxi Log',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
@@ -166,6 +167,16 @@ class HomePageState extends State<HomePage> {
       return;
     }
 
+    if (_endMileage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot add jobs after end mileage is set'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     final jobDetails = await Navigator.push<Job>(
       context,
       MaterialPageRoute(builder: (context) => const AddJobScreen()),
@@ -176,7 +187,7 @@ class HomePageState extends State<HomePage> {
         final job = Job(
           date: _startTime ?? DateTime.now(),
           startMileage: _startMileage!,
-          endMileage: _endMileage,
+          endMileage: null, // Each job doesn't need end mileage
           price: jobDetails.price,
           paymentType: jobDetails.paymentType,
           notes: jobDetails.notes,
@@ -184,14 +195,6 @@ class HomePageState extends State<HomePage> {
 
         await _databaseService.insertJob(job);
         await _loadSummaries();
-
-        // Reset mileage values after successful job creation
-        setState(() {
-          _startMileage = null;
-          _endMileage = null;
-          _startTime = null;
-          _endTime = null;
-        });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -203,6 +206,57 @@ class HomePageState extends State<HomePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Error saving job: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _editJob(Job job) async {
+    final result = await Navigator.push<dynamic>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditJobScreen(job: job),
+      ),
+    );
+
+    if (result == 'DELETE') {
+      if (job.id != null) {
+        try {
+          await _databaseService.deleteJob(job.id!);
+          await _loadSummaries();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Job deleted successfully')),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error deleting job: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } else if (result is Job) {
+      try {
+        await _databaseService.updateJob(result);
+        await _loadSummaries();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Job updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error updating job: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -235,95 +289,147 @@ class HomePageState extends State<HomePage> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const Divider(),
-            if (summary.mileageOnlyTotal != null) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Total by Mileage (£${widget.settings.mileageRate}/mile + £${widget.settings.shiftCharge}):'),
-                  Text(
-                    '£${summary.mileageOnlyTotal!.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                ],
+            // Daily Summary Section
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              if (summary.accountTotal > 0) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Account Jobs:'),
-                    Text('£${summary.accountTotal.toStringAsFixed(2)}'),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Total:'),
-                    Text(
-                      '£${summary.calculatedTotal!.toStringAsFixed(2)}',
-                      style: const TextStyle(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Daily Summary',
+                      style: TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ],
-            if (summary.totalMiles != null) ...[
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total Miles:'),
-                  Text(
-                    '${summary.totalMiles!.toStringAsFixed(1)} miles',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                ],
-              ),
-            ],
-            const Divider(),
-            ...summary.jobs.map((job) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            const Text('Total Jobs:'),
                             Text(
-                              DateFormat('HH:mm').format(job.date),
+                              '${summary.jobs.length}',
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            Text(
-                                'Mileage: ${job.startMileage}${job.endMileage != null ? ' - ${job.endMileage}' : ''}'),
-                            if (job.distance != null)
-                              Text('Distance: ${job.distance!.toStringAsFixed(1)} miles'),
-                            if (job.calculatedPrice(widget.settings) != null && job.paymentType != 'account')
-                              Text(
-                                'Calculated: £${job.calculatedPrice(widget.settings)!.toStringAsFixed(2)}',
-                                style: const TextStyle(color: Colors.green),
-                              ),
-                            if (job.notes?.isNotEmpty == true)
-                              Text('Notes: ${job.notes}'),
                           ],
                         ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '£${job.price.toStringAsFixed(2)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        if (summary.totalMiles != null) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total Miles:'),
+                              Text(
+                                '${summary.totalMiles!.toStringAsFixed(1)} miles',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
-                          Text(job.paymentType),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Mileage Total (£${widget.settings.mileageRate}/mile + £${widget.settings.shiftCharge}):'),
+                              Text(
+                                '£${summary.mileageOnlyTotal!.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
-                      ),
-                    ],
+                        if (summary.accountTotal > 0)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Account Jobs:'),
+                              Text(
+                                '£${summary.accountTotal.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        if (summary.calculatedTotal != null)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Total Earnings:'),
+                              Text(
+                                '£${summary.calculatedTotal!.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Jobs',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...summary.jobs.map((job) => InkWell(
+                  onTap: () => _editJob(job),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                DateFormat('HH:mm').format(job.date),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                  'Mileage: ${job.startMileage}${job.endMileage != null ? ' - ${job.endMileage}' : ''}'),
+                              if (job.distance != null)
+                                Text('Distance: ${job.distance!.toStringAsFixed(1)} miles'),
+                              if (job.calculatedPrice(widget.settings) != null && job.paymentType != 'account')
+                                Text(
+                                  'Calculated: £${job.calculatedPrice(widget.settings)!.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: Colors.green),
+                                ),
+                              if (job.notes?.isNotEmpty == true)
+                                Text('Notes: ${job.notes}'),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '£${job.price.toStringAsFixed(2)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text(job.paymentType),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 )),
           ],
@@ -336,7 +442,7 @@ class HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Taxi Job Tracker'),
+        title: const Text('Taxi Log'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -349,15 +455,6 @@ class HomePageState extends State<HomePage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_isMenuOpen) ...[
-            Tooltip(
-              message: 'Export (${DateFormat('HH:mm').format(DateTime.now())})',
-              child: FloatingActionButton.small(
-                heroTag: 'export',
-                onPressed: _exportData,
-                child: const Icon(Icons.file_download),
-              ),
-            ),
-            const SizedBox(height: 8),
             Tooltip(
               message: 'Add Job Details (${DateFormat('HH:mm').format(DateTime.now())})',
               child: FloatingActionButton.small(

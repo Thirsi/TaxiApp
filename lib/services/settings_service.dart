@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'database_service.dart';
 
 class SettingsService {
+  DatabaseService? _databaseService;
   static const String _mileageRateKey = 'mileageRate';
   static const String _shiftChargeKey = 'shiftCharge';
   
@@ -9,7 +11,9 @@ class SettingsService {
 
   final SharedPreferences _prefs;
 
-  SettingsService(this._prefs);
+  SettingsService(this._prefs) {
+    _databaseService = DatabaseService(this);
+  }
 
   static Future<SettingsService> create() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,5 +34,9 @@ class SettingsService {
   Future<void> resetToDefaults() async {
     await _prefs.remove(_mileageRateKey);
     await _prefs.remove(_shiftChargeKey);
+  }
+
+  Future<void> clearDatabase() async {
+    await _databaseService?.clearDatabase();
   }
 }
